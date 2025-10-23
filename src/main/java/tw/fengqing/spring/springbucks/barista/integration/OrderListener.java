@@ -27,19 +27,21 @@ public class OrderListener {
     private CoffeeOrderRepository orderRepository;
     @Autowired
     private StreamBridge streamBridge;
+    
     @Value("${order.barista-prefix}${random.uuid}")
     private String barista;
+
+    @Value("${stream.bindings.finished-orders-binding}")
+    private String finishedOrdersBindingFromConfig;
 
     /**
      * 處理新訂單的函數式 Bean
      * 接收新訂單 ID，製作咖啡並發送完成消息
-     * 邏輯等價於 @StreamListener 和 @SendTo 的實現
      * @return 訂單處理函數
      */
     @Bean
     public Consumer<Long> newOrders() {
         return id -> {
-            // 使用 findById 替代已棄用的 getOne 方法，但保持相同的邏輯
             CoffeeOrder o = orderRepository.findById(id).orElse(null);
             if (o == null) {
                 log.warn("Order id {} is NOT valid.", id);
@@ -48,14 +50,14 @@ public class OrderListener {
             log.info("Receive a new Order {}. Waiter: {}. Customer: {}",
                     id, o.getWaiter(), o.getCustomer());
             
-            // 設置為已完成狀態（與原版本一致）
+            // 設置為製作完成狀態
             o.setState(OrderState.BREWED);
             o.setBarista(barista);
             orderRepository.save(o);
             log.info("Order {} is READY.", id);
-            // 使用 StreamBridge 發送完成訂單消息
             Message<Long> message = MessageBuilder.withPayload(id).build();
-            streamBridge.send(Waiter.FINISHED_ORDERS, message);
+            // 使用StreamBridge發送完成訂單消息
+            streamBridge.send(finishedOrdersBindingFromConfig, message);
         };
     }
 }
